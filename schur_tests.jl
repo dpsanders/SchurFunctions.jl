@@ -20,8 +20,8 @@ facts("Partition map thing") do
     @fact p(30,5) - p(30,4) --> 377  # exactly 5 parts
     @fact p(100) --> 190569292
 
-    @fact calculate_character_table(3) --> [ 1   2   1;
-                                             1   0  -1;
-                                             1  -1   1]
+    @fact character_table(3) --> [  1   2   1;
+                                    1   0  -1;
+                                    1  -1   1]
 
 end

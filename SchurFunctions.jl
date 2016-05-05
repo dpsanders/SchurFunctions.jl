@@ -159,7 +159,7 @@ function weighted_dot_product(v1, v2, weight)
     total
 end
 
-function calculate_character_table(n)
+function character_table(n)
     macz = Array(Int, pnums[n, n])  # Macdonald's z function
 
     for i = 1:pnums[n,n]
@@ -184,8 +184,8 @@ function calculate_character_table(n)
     #@show A2PStored[n]
 
 
-    Schur = convert(Array{Rational{Int}}, A2PStored[n])
-    macz_weight = convert(Array{Rational{Int}}, macz)
+    Schur = convert(Array{Rational{Int128}}, A2PStored[n])
+    macz_weight = macz # convert(Array{Rational{Int128}}, macz)
 
     #@show Schur
     #@show macz_weight
@@ -207,7 +207,7 @@ function calculate_character_table(n)
         #@show Schur[:, i]
         dot = weighted_dot_product(Schur[:, i], Schur[:, i], macz_weight)
         #@show dot
-        norm = trunc(Int, sqrt(dot))
+        norm = trunc(Int, sqrt(dot))  # we know that it's actually an integer
 
         Schur[:,i] /= norm
     end
@@ -216,14 +216,12 @@ function calculate_character_table(n)
 
     # normalize rows by first element to get character table:
 
-    character_table = copy(Schur)
-    for i in 1:size(character_table, 1)
-        first = character_table[i, 1]
-        for j in 1:size(character_table, 2)
-            character_table[i, j] /= first
-        end
+    χ = copy(Schur)
+    for i in 1:size(χ, 1)
+        first = χ[i, 1]
+        χ[i,:] /= first
     end
     #diagm(vec(Schur[:,1]) .^ (-1)) * Schur
 
-    character_table
+    χ
 end
