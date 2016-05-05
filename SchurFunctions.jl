@@ -20,16 +20,20 @@ function p(n, k)
 end
 
 
-
-
-# Memoize the result of calculating the p's
-# Could populate pnums more carefully to avoid redundant evaluations of p
-const max_n = 20
+# Should memoize the result of calculating the p's
+# and populate pnums more carefully to avoid redundant evaluations of p
+const max_n = 25
 const pnums = [p(i, j) for i = 1:max_n, j = 1:max_n]
 
 p(n) = n < max_n ? pnums[n, n] : p(n, n)
 
-doc"""Implicitly enumerate all integer partitions in a sequence, in particular in lexicographic order, e.g. for $n=5$, we have $p(5)=7$ partitions:
+doc"""
+    int2partition(k, n)
+
+Return the $k$th partition in the list of partitions of $n$.
+
+Partitions are enumerated in lexicographic order, e.g.
+for $n=5$ there are $p(5)=7$ partitions:
 
 - 11111
 - 2111
@@ -38,8 +42,6 @@ doc"""Implicitly enumerate all integer partitions in a sequence, in particular i
 - 32
 - 41
 - 5
-
-`int2partition(k, n)` returns the $k$th partition in the list of the partitions of $n$.
 """
 
 function int2partition(k::Integer, n::Integer)
@@ -101,7 +103,7 @@ A vector of zeros is made, and then each term is added in as it is computed.
 """
 
 function augmon2psum(P::Vector{Int})
-   psize= sum(P)
+   psize = sum(P)
    accum = zeros(Int, pnums[psize, psize])  # accumulator
 
    k = partition2int(P)
@@ -145,10 +147,21 @@ function augmon2psum(P::Vector{Int})
 end
 
 
+function weighted_dot_product(v1, v2, weight)
 
+    total = zero(promote(v1[1], weight[1])[1])
+
+    for i in 1:length(v1)
+        total += v1[i]*v2[i]*weight[i]
+    end
+
+    #@show total
+    total
+end
 
 function calculate_character_table(n)
     macz = Array(Int, pnums[n, n])  # Macdonald's z function
+
     for i = 1:pnums[n,n]
         P = int2partition(i, n)
         count = zeros(Int, n)
@@ -158,33 +171,59 @@ function calculate_character_table(n)
         end
         macz[i] = prod(map(factorial, count)) * prod(P)
     end
-    maczM = diagm(macz)
+    # maczM = diagm(macz)
+
+
 
     # A side-effect of computing
     #     augmon2psum(ones(Int,n))
     # is that it populates the entire A2PStored matrix
 
-    augmon2psum(ones(Int, n))
+    @time augmon2psum(ones(Int, n))
 
-    @show A2PStored[n]
+    #@show A2PStored[n]
 
 
+    Schur = convert(Array{Rational{Int}}, A2PStored[n])
+    macz_weight = convert(Array{Rational{Int}}, macz)
 
-    Schur = A2PStored[n] / 1.0
+    #@show Schur
+    #@show macz_weight
 
 
     for i = 1:pnums[n, n]
         # Orthogonalize with respect to all earlier vectors using Gram-Schmidt:
         for j = 1:i-1
-        	Schur[:, i] -= ( Schur[:, i]' * maczM * Schur[:,j] )[1] * Schur[:,j]
+
+            #@show i, j, weighted_dot_product(Schur[:, i], Schur[:, j], macz_weight)
+
+            Schur[:, i] -= weighted_dot_product(Schur[:, i], Schur[:, j], macz_weight) * Schur[:,j]
+        	# Schur[:, i] -= ( Schur[:, i]' * maczM * Schur[:,j] )[1] * Schur[:,j]
         end
 
         # Normalize
-        norm = round(Int, sqrt(Schur[:, i]' * maczM * Schur[:, i]))
-        # weighted dot product
-        Schur[:,i] /= norm[1]
-    end;
+        # norm = round(Int, sqrt(Schur[:, i]' * maczM * Schur[:, i]))
 
-    @show Schur
-    Character = diagm(vec(Schur[:,1]) .^ (-1)) * Schur
+        #@show Schur[:, i]
+        dot = weighted_dot_product(Schur[:, i], Schur[:, i], macz_weight)
+        #@show dot
+        norm = trunc(Int, sqrt(dot))
+
+        Schur[:,i] /= norm
+    end
+
+    #@show Schur
+
+    # normalize rows by first element to get character table:
+
+    character_table = copy(Schur)
+    for i in 1:size(character_table, 1)
+        first = character_table[i, 1]
+        for j in 1:size(character_table, 2)
+            character_table[i, j] /= first
+        end
+    end
+    #diagm(vec(Schur[:,1]) .^ (-1)) * Schur
+
+    character_table
 end
