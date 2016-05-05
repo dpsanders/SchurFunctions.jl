@@ -45,7 +45,8 @@ for $n=5$ there are $p(5)=7$ partitions:
 """
 
 function int2partition(k::Integer, n::Integer)
-    n < 0 && throw(ArgumentError("n must be ≥ 0"))
+    # n < 0 && throw(ArgumentError("n must be ≥ 0"))
+
     n == 0 && return Array(Int, 0)
 
    if k > pnums[n, n]  # If k too big, take it modulo pnums[n,n]
@@ -60,7 +61,7 @@ function int2partition(k::Integer, n::Integer)
 
    i == 1 && return ones(Int, n)
 
-   [i; int2partition(k - pnums[n, i-1], n - i)]  # concatenates i onto the front
+   unshift!(int2partition(k - pnums[n, i-1], n - i), i )   # concatenates i onto the front
 end
 
 doc"""`partition2int` is the inverse function of `int2partition`:
@@ -82,12 +83,17 @@ end
 
 
 "Augmented monomial to power-sum"
-A2PStored = Matrix{Int}[]
-for i = 1:max_n
-    num_partitions = pnums[i, i]
-    push!(A2PStored, zeros(Int, num_partitions, num_partitions))
-    A2PStored[i][end, end] = 1
+const augmented_to_power_sum = Matrix{Int}[]
+
+function setup_augmented_to_power_sum()
+    for i = 1:max_n
+        num_partitions = pnums[i, i]
+        push!(augmented_to_power_sum, zeros(Int, num_partitions, num_partitions))
+        augmented_to_power_sum[i][end, end] = 1
+    end
 end
+
+setup_augmented_to_power_sum()
 
 doc"""
 Compute the augmented monomial symmetric function indexed by
@@ -97,7 +103,7 @@ We use the fact that
 `am[l1, l2, ..., lk] = p[lk]*am[l1, l2, ..., lk]
     - sum(i=1..k-1)am[l1, l2, ..., l(i-1), li+lk, l(i+1), ..., lk]`
 
-The results are stored in the table A2PStored, to reduce redundancy.
+The results are stored in the table augmented_to_power_sum, to reduce redundancy.
 
 A vector of zeros is made, and then each term is added in as it is computed.
 """
@@ -107,7 +113,7 @@ function augmon2psum(P::Vector{Int})
    accum = zeros(Int, pnums[psize, psize])  # accumulator
 
    k = partition2int(P)
-   A2PStored[psize][k, k] == 1 && return A2PStored[psize][:, k]
+   augmented_to_power_sum[psize][k, k] == 1 && return augmented_to_power_sum[psize][:, k]
 
    if length(P) == 1
        accum[end] = 1
@@ -141,54 +147,73 @@ function augmon2psum(P::Vector{Int})
        end
    end
 
-   A2PStored[psize][:,k] = accum
+   augmented_to_power_sum[psize][:,k] = accum
 
    accum
 end
 
 
-function weighted_dot_product(v1, v2, weight)
+function weighted_dot_product{T}(v1::Vector{T}, v2::Vector{T}, weight::Vector)
 
-    total = zero(promote(v1[1], weight[1])[1])
+    total = zero(T)
 
     for i in 1:length(v1)
-        total += v1[i]*v2[i]*weight[i]
+        total += v1[i] * v2[i] * weight[i]
     end
 
-    #@show total
+    # @show v1, v2, weight, total
+
     total
+
+
 end
 
 function character_table(n)
-    macz = Array(Int, pnums[n, n])  # Macdonald's z function
+    macz = zeros(Int128, pnums[n, n])  # Macdonald's z function
 
     for i = 1:pnums[n,n]
         P = int2partition(i, n)
-        count = zeros(Int, n)
 
+        powers = zeros(Int, n)
         for j in P
-            count[j] += 1 # turns into representation of partition as 1^4.2^6 etc.
+            powers[j] += 1  # finds representation of partition using powers as  1^4 2^6 etc.
         end
-        macz[i] = prod(map(factorial, count)) * prod(P)
-    end
-    # maczM = diagm(macz)
 
+        product = Int128(1)
+        for k in powers
+            product *= factorial(k)
+        end
+
+        for k in P
+            product *= k
+        end
+
+        #macz[i] = prod(map(factorial, powers)) * prod(P)
+        #@show macz[i] - product
+        macz[i] = product
+    end
+
+    @show macz
 
 
     # A side-effect of computing
     #     augmon2psum(ones(Int,n))
-    # is that it populates the entire A2PStored matrix
+    # is that it populates the entire augmented_to_power_sum matrix
 
-    @time augmon2psum(ones(Int, n))
+    augmon2psum(ones(Int, n))
 
-    #@show A2PStored[n]
+    #@show augmented_to_power_sum[n]
 
 
-    Schur = convert(Array{Rational{Int128}}, A2PStored[n])
-    macz_weight = macz # convert(Array{Rational{Int128}}, macz)
+    #Schur = convert(Array{Rational{Int128}}, augmented_to_power_sum[n])
+
+    Schur = convert(Array{Rational{Int128}}, augmented_to_power_sum[n])
+    #macz_weight = convert(Array{T}, macz) # convert(Array{Rational{Int128}}, macz)
+    macz_weight = macz
 
     #@show Schur
-    #@show macz_weight
+    @show macz_weight
+
 
 
     for i = 1:pnums[n, n]
@@ -197,31 +222,34 @@ function character_table(n)
 
             #@show i, j, weighted_dot_product(Schur[:, i], Schur[:, j], macz_weight)
 
-            Schur[:, i] -= weighted_dot_product(Schur[:, i], Schur[:, j], macz_weight) * Schur[:,j]
+            Schur[:, i] -= weighted_dot_product(Schur[:, i], Schur[:, j], macz_weight) * Schur[:, j]
         	# Schur[:, i] -= ( Schur[:, i]' * maczM * Schur[:,j] )[1] * Schur[:,j]
         end
 
-        # Normalize
-        # norm = round(Int, sqrt(Schur[:, i]' * maczM * Schur[:, i]))
+        # normalize:
+        normsq = weighted_dot_product(Schur[:, i], Schur[:, i], macz_weight)
+        norm = round(Int, sqrt(normsq))  # we know that normsq is actually an integer
+
+        Schur[:, i] /= norm
 
         #@show Schur[:, i]
-        dot = weighted_dot_product(Schur[:, i], Schur[:, i], macz_weight)
-        #@show dot
-        norm = trunc(Int, sqrt(dot))  # we know that it's actually an integer
 
-        Schur[:,i] /= norm
     end
 
     #@show Schur
 
     # normalize rows by first element to get character table:
 
-    χ = copy(Schur)
-    for i in 1:size(χ, 1)
-        first = χ[i, 1]
-        χ[i,:] /= first
-    end
-    #diagm(vec(Schur[:,1]) .^ (-1)) * Schur
+    # χ = copy(Schur)
+    # for i in 1:size(χ, 1)
+    #     first = χ[i, 1]
+    #     χ[i,:] /= first
+    # end
+    #
+    # #map(Int, χ)
+    # Schur, χ
 
-    χ
+    χ = map(Int, inv(Schur))
+
+    Schur, χ
 end
