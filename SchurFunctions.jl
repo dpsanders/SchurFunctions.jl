@@ -7,6 +7,7 @@
 # by integers, using an explicit map between partitions
 # and integers.
 
+
 ## Number of integer partitions
 doc"""$p(n,k)$ is number of integer partitions of $n$ with largest part at most $k$
 """
@@ -197,14 +198,18 @@ function weighted_dot_product{T}(v1::Vector{T}, v2::Vector{T}, weight::Vector)
 end
 
 
-doc"""Calculate the coefficients of the Schur function of size n in terms of the augmented monomial basis"""
-function Schur_function(n)
-
-    macz = macz_weight(n)
+doc"""Calculate the coefficients of the Schur function of size n in terms of the augmented monomial basis. Specify an optional type `T` for the calculation."""
+function Schur_function(n, T::Type=Rational{Int128})
 
     @time augmon2psum(ones(Int, n)) # Side-effect is populating the entire augmented_to_power_sum matrix
 
-    Schur = convert(Array{Rational{Int128}}, augmented_to_power_sum[n])
+
+    # set_bigfloat_precision(128)
+    # T = BigFloat
+    # T = Float64
+    Schur = convert(Array{T}, augmented_to_power_sum[n])
+    macz = convert(Array{T}, macz_weight(n))
+
 
     # Orthogonalize with respect to all earlier vectors using Gram-Schmidt:
 
@@ -227,8 +232,8 @@ function Schur_function(n)
 end
 
 doc"""Calculate the character table for the group S_n"""
-function character_table(n)
+function character_table(n, T::Type=Rational{Int128})
 
-    χ = map(Int, inv(Schur_function(n)))
+    χ = map(x -> round(Int, x), inv(Schur_function(n, T)))
 
 end
