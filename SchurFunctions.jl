@@ -95,13 +95,14 @@ end
 
 setup_augmented_to_power_sum()
 
+
 doc"""
 Compute the augmented monomial symmetric function indexed by
 the partition P as an array of coefficients in the p basis (power-sum basis)
 
 We use the fact that
 `am[l1, l2, ..., lk] = p[lk]*am[l1, l2, ..., lk]
-    - sum(i=1..k-1)am[l1, l2, ..., l(i-1), li+lk, l(i+1), ..., lk]`
+    - sum(i=1..k-1) am[l1, l2, ..., l(i-1), li+lk, l(i+1), ..., lk]`
 
 The results are stored in the table augmented_to_power_sum, to reduce redundancy.
 
@@ -122,10 +123,10 @@ function augmon2psum(P::Vector{Int})
 
 
    firstterm = augmon2psum(P[1:end-1])
-   # firsterm is of form p_(something) * m̃_(something)
+   # firsterm is of form p_(something) * am(something)
 
    for i = 1:length(firstterm)  # iterating over the thing that was a partition of the smaller object
-       new_partition = [P[end]; int2partition(i, psize  -P[end])]
+       new_partition = unshift!(int2partition(i, psize - P[end]), P[end])
        sort!(new_partition, rev=true)
 
        accum[ partition2int(new_partition) ] += firstterm[i]
@@ -153,23 +154,10 @@ function augmon2psum(P::Vector{Int})
 end
 
 
-function weighted_dot_product{T}(v1::Vector{T}, v2::Vector{T}, weight::Vector)
 
-    total = zero(T)
-
-    for i in 1:length(v1)
-        total += v1[i] * v2[i] * weight[i]
-    end
-
-    # @show v1, v2, weight, total
-
-    total
-
-
-end
-
-function character_table(n)
-    macz = zeros(Int128, pnums[n, n])  # Macdonald's z function
+doc"""Macdonald $z$-function weight"""
+function macz_weight(n)
+    macz = zeros(Int128, pnums[n, n])
 
     for i = 1:pnums[n,n]
         P = int2partition(i, n)
@@ -193,63 +181,54 @@ function character_table(n)
         macz[i] = product
     end
 
-    @show macz
+    macz
+end
+
+doc"""Calculate weighted dot product of `v1` and `v2` with given `weight` vector."""
+function weighted_dot_product{T}(v1::Vector{T}, v2::Vector{T}, weight::Vector)
+
+    total = zero(T)
+
+    for i in 1:length(v1)
+        total += v1[i] * v2[i] * weight[i]
+    end
+
+    total
+end
 
 
-    # A side-effect of computing
-    #     augmon2psum(ones(Int,n))
-    # is that it populates the entire augmented_to_power_sum matrix
+doc"""Calculate the coefficients of the Schur function of size n in terms of the augmented monomial basis"""
+function Schur_function(n)
 
-    augmon2psum(ones(Int, n))
+    macz = macz_weight(n)
 
-    #@show augmented_to_power_sum[n]
-
-
-    #Schur = convert(Array{Rational{Int128}}, augmented_to_power_sum[n])
+    augmon2psum(ones(Int, n)) # Side-effect is populating the entire augmented_to_power_sum matrix
 
     Schur = convert(Array{Rational{Int128}}, augmented_to_power_sum[n])
-    #macz_weight = convert(Array{T}, macz) # convert(Array{Rational{Int128}}, macz)
-    macz_weight = macz
 
-    #@show Schur
-    @show macz_weight
-
-
+    # Orthogonalize with respect to all earlier vectors using Gram-Schmidt:
 
     for i = 1:pnums[n, n]
-        # Orthogonalize with respect to all earlier vectors using Gram-Schmidt:
         for j = 1:i-1
 
-            #@show i, j, weighted_dot_product(Schur[:, i], Schur[:, j], macz_weight)
+            Schur[:, i] -= weighted_dot_product(Schur[:, i], Schur[:, j], macz) * Schur[:, j]
 
-            Schur[:, i] -= weighted_dot_product(Schur[:, i], Schur[:, j], macz_weight) * Schur[:, j]
-        	# Schur[:, i] -= ( Schur[:, i]' * maczM * Schur[:,j] )[1] * Schur[:,j]
         end
 
         # normalize:
-        normsq = weighted_dot_product(Schur[:, i], Schur[:, i], macz_weight)
-        norm = round(Int, sqrt(normsq))  # we know that normsq is actually an integer
+        normsq = weighted_dot_product(Schur[:, i], Schur[:, i], macz)
+        norm = round(Int, sqrt(normsq))  # we know that normsq must actually be an integer
 
         Schur[:, i] /= norm
 
-        #@show Schur[:, i]
-
     end
 
-    #@show Schur
+    Schur
+end
 
-    # normalize rows by first element to get character table:
+doc"""Calculate the character table for the group S_n"""
+function character_table(n)
 
-    # χ = copy(Schur)
-    # for i in 1:size(χ, 1)
-    #     first = χ[i, 1]
-    #     χ[i,:] /= first
-    # end
-    #
-    # #map(Int, χ)
-    # Schur, χ
+    χ = map(Int, inv(Schur_function(n)))
 
-    χ = map(Int, inv(Schur))
-
-    Schur, χ
 end
