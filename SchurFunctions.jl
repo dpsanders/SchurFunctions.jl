@@ -202,7 +202,7 @@ function Schur_function(n)
 
     macz = macz_weight(n)
 
-    augmon2psum(ones(Int, n)) # Side-effect is populating the entire augmented_to_power_sum matrix
+    @time augmon2psum(ones(Int, n)) # Side-effect is populating the entire augmented_to_power_sum matrix
 
     Schur = convert(Array{Rational{Int128}}, augmented_to_power_sum[n])
 
